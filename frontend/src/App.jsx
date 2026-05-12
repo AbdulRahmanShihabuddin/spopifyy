@@ -262,27 +262,28 @@ function App() {
   };
 
   const fetchArtistGenresInBatches = async (artistIds) => {
-    const batches = [];
-    for (let i = 0; i < artistIds.length; i += 25) {
-      const batch = artistIds.slice(i, i + 25);
-      const queryParams = new URLSearchParams({
-        access_token: accessToken,
-        artist_ids: encodeURIComponent(JSON.stringify(batch))
-      });
-      batches.push(
-        fetchWithTokenRefresh(
-          async (currentToken) => {
-            const res = await axios.get(`${API_BASE_URL}/spotify/artist-genres?access_token=${currentToken || accessToken}&artist_ids=${encodeURIComponent(JSON.stringify(batch))}`);
-            return res.data;
-          }
-        ).catch(err => {
-          console.error(`Artist genre batch ${i / 25 + 1} failed:`, err.response?.data || err.message);
+    const BATCH_SIZE = 50; // Spotify max is 50
+    const allBatches = [];
+    for (let i = 0; i < artistIds.length; i += BATCH_SIZE) {
+      allBatches.push(artistIds.slice(i, i + BATCH_SIZE));
+    }
+    
+    const results = [];
+    // Process 3 batches concurrently to respect rate limits while being fast
+    for (let i = 0; i < allBatches.length; i += 3) {
+      const chunk = allBatches.slice(i, i + 3);
+      const chunkPromises = chunk.map(batch => 
+        fetchWithTokenRefresh(async (currentToken) => {
+          const res = await axios.get(`${API_BASE_URL}/spotify/artist-genres?access_token=${currentToken || accessToken}&artist_ids=${encodeURIComponent(JSON.stringify(batch))}`);
+          return res.data;
+        }).catch(err => {
+          console.error('Artist genre batch failed:', err.response?.data || err.message);
           return [];
         })
       );
-      if (i + 25 < artistIds.length) await new Promise(resolve => setTimeout(resolve, 500));
+      results.push(...(await Promise.all(chunkPromises)));
     }
-    return (await Promise.all(batches)).flat();
+    return results.flat();
   };
 
   const fetchLastFmGenres = async (artists) => {

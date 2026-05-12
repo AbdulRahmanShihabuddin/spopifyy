@@ -154,15 +154,30 @@ app.get('/spotify/user-playlists', async (req, res) => {
 app.get('/spotify/playlist-tracks', async (req, res) => {
   const { access_token, playlist_id } = req.query;
   try {
-    let allTracks = [];
-    let next = `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`;
-
-    while (next) {
-      const response = await axios.get(next, {
-        headers: { 'Authorization': `Bearer ${access_token}` }
-      });
-      allTracks = allTracks.concat(response.data.items);
-      next = response.data.next;
+    const initialResponse = await axios.get(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100&offset=0`, {
+      headers: { 'Authorization': `Bearer ${access_token}` }
+    });
+    
+    let allTracks = [...initialResponse.data.items];
+    const total = initialResponse.data.total;
+    
+    if (total > 100) {
+      const promises = [];
+      for (let offset = 100; offset < total; offset += 100) {
+        promises.push(
+          axios.get(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100&offset=${offset}`, {
+            headers: { 'Authorization': `Bearer ${access_token}` }
+          })
+        );
+      }
+      
+      for (let i = 0; i < promises.length; i += 10) {
+        const chunk = promises.slice(i, i + 10);
+        const responses = await Promise.all(chunk);
+        responses.forEach(response => {
+          allTracks = allTracks.concat(response.data.items);
+        });
+      }
     }
 
     res.json(allTracks);
@@ -175,15 +190,30 @@ app.get('/spotify/playlist-tracks', async (req, res) => {
 app.get('/spotify/liked-songs', async (req, res) => {
   const { access_token } = req.query;
   try {
-    let allTracks = [];
-    let next = `https://api.spotify.com/v1/me/tracks?limit=50`;
-
-    while (next) {
-      const response = await axios.get(next, {
-        headers: { 'Authorization': `Bearer ${access_token}` }
-      });
-      allTracks = allTracks.concat(response.data.items);
-      next = response.data.next;
+    const initialResponse = await axios.get('https://api.spotify.com/v1/me/tracks?limit=50&offset=0', {
+      headers: { 'Authorization': `Bearer ${access_token}` }
+    });
+    
+    let allTracks = [...initialResponse.data.items];
+    const total = initialResponse.data.total;
+    
+    if (total > 50) {
+      const promises = [];
+      for (let offset = 50; offset < total; offset += 50) {
+        promises.push(
+          axios.get(`https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`, {
+            headers: { 'Authorization': `Bearer ${access_token}` }
+          })
+        );
+      }
+      
+      for (let i = 0; i < promises.length; i += 10) {
+        const chunk = promises.slice(i, i + 10);
+        const responses = await Promise.all(chunk);
+        responses.forEach(response => {
+          allTracks = allTracks.concat(response.data.items);
+        });
+      }
     }
 
     res.json(allTracks);

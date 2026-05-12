@@ -791,7 +791,7 @@ function App() {
         /* Dashboard */
         <div className="max-w-4xl mx-auto p-6 md:p-8 animate-fade-in">
           {/* Header */}
-          <header className="flex items-center justify-between mb-10">
+          <header className="flex items-center justify-center mb-10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center overflow-hidden">
                 <img

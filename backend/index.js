@@ -5,15 +5,11 @@ import querystring from 'querystring';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage } from "@langchain/core/messages";
 
 dotenv.config();
-
-const app = express();
-app.use(cors());
-app.use(helmet());
-app.use(express.json({ limit: '100kb' })); // Limit JSON body size
 
 const {
   SPOTIFY_CLIENT_ID,
@@ -21,20 +17,55 @@ const {
   REDIRECT_URI,
   FRONTEND_URI,
   MONGODB_URI,
-  LASTFM_API_KEY
+  LASTFM_API_KEY,
+  GOOGLE_API_KEY
 } = process.env;
+
+const app = express();
+
+// Strict CORS: Only allow the configured frontend URI
+app.use(cors({
+  origin: FRONTEND_URI || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  credentials: true
+}));
+
+app.use(helmet());
+app.use(express.json({ limit: '100kb' })); // Limit JSON body size
+
+// Global Rate Limiter: 150 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  message: { error: 'Too many requests from this IP, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
+// Specific Rate Limiter for AI endpoint to prevent API quota exhaustion
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: { error: 'Too many AI suggestions requested. Please slow down.' }
+});
+
+let chat = null;
+if (GOOGLE_API_KEY) {
+  chat = new ChatGoogleGenerativeAI({
+    apiKey: GOOGLE_API_KEY,
+    model: "gemini-1.5-flash",
+    temperature: 0.8,
+  });
+} else {
+  console.warn("⚠️ GOOGLE_API_KEY is not set. AI playlist suggestions will be disabled.");
+}
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => console.log('MongoDB connected successfully'))
   .catch(err => console.error('MongoDB connection error:', err));
-
-const chat = new ChatGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_API_KEY,
-  model: "gemini-1.5-flash",
-  temperature: 0.8,
-});
 
 const UserTrackGenreSchema = new mongoose.Schema({
   userId: String,    // Spotify user id
@@ -87,7 +118,10 @@ app.get('/callback', async (req, res) => {
 });
 
 
-app.post('/ai/suggest-playlist-name', async (req, res) => {
+app.post('/ai/suggest-playlist-name', aiLimiter, async (req, res) => {
+  if (!chat) {
+    return res.status(503).json({ error: 'AI suggestion service is not configured on the server.' });
+  }
   const { genres, baseName } = req.body;
   if (!genres || !Array.isArray(genres) || genres.length === 0) {
     return res.status(400).json({ error: 'Genres are required' });

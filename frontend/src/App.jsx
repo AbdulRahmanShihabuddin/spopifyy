@@ -171,6 +171,7 @@ function App() {
       setAccessToken(null);
       localStorage.removeItem('spotify_access_token');
       localStorage.removeItem('spotify_refresh_token');
+      localStorage.removeItem('spotify_token_expiration');
       return null;
     }
 
@@ -178,9 +179,11 @@ function App() {
       console.log('Attempting to refresh access token');
       const response = await axios.post(`${API_BASE_URL}/refresh_token`, { refresh_token: storedRefreshToken });
       const { access_token, refresh_token, expires_in } = response.data;
+      const expirationTime = new Date().getTime() + parseInt(expires_in) * 1000;
       setAccessToken(access_token);
       localStorage.setItem('spotify_access_token', access_token);
       localStorage.setItem('spotify_refresh_token', refresh_token || storedRefreshToken);
+      localStorage.setItem('spotify_token_expiration', expirationTime);
       console.log('Access token refreshed successfully, expires in:', expires_in);
       return access_token;
     } catch (err) {
@@ -189,19 +192,30 @@ function App() {
       setAccessToken(null);
       localStorage.removeItem('spotify_access_token');
       localStorage.removeItem('spotify_refresh_token');
+      localStorage.removeItem('spotify_token_expiration');
       return null;
     }
   }, []);
 
   const fetchWithTokenRefresh = useCallback(async (fetchFn, ...args) => {
+    const expirationTime = localStorage.getItem('spotify_token_expiration');
+    if (expirationTime && new Date().getTime() > parseInt(expirationTime) - 60000) {
+      console.warn('Access token expired or expiring soon, proactively refreshing');
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return await fetchFn(newToken, ...args);
+      }
+      throw new Error('Unable to refresh access token');
+    }
+
     try {
-      return await fetchFn(...args);
+      return await fetchFn(undefined, ...args);
     } catch (err) {
       if (err.response?.status === 401 || err.message.includes('access token expired')) {
-        console.warn('Access token expired, attempting refresh');
+        console.warn('Access token expired during request, attempting refresh');
         const newToken = await refreshAccessToken();
         if (newToken) {
-          return await fetchFn(newToken);
+          return await fetchFn(newToken, ...args);
         }
         throw new Error('Unable to refresh access token');
       }
@@ -213,6 +227,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('access_token');
     const refresh = params.get('refresh_token');
+    const expiresIn = params.get('expires_in');
 
     const fetchUserPlaylists = async (token) => {
       return fetchWithTokenRefresh(async (currentToken) => {
@@ -224,9 +239,13 @@ function App() {
     };
 
     if (token && refresh) {
+      const expirationTime = new Date().getTime() + parseInt(expiresIn || 3600) * 1000;
       setAccessToken(token);
       localStorage.setItem('spotify_access_token', token);
       localStorage.setItem('spotify_refresh_token', refresh);
+      localStorage.setItem('spotify_token_expiration', expirationTime);
+      // Clean up URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
       fetchUserPlaylists(token);
     } else {
       const savedToken = localStorage.getItem('spotify_access_token');

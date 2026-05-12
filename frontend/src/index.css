@@ -314,7 +314,7 @@ body {
   width: calc(100% - 2rem);
   max-height: 90vh;
   overflow-y: auto;
-  animation: slideUp 0.3s ease-out;
+  animation: slideUpModal 0.3s ease-out;
 }
 
 /* Animations */
@@ -328,7 +328,7 @@ body {
   }
 }
 
-@keyframes slideUp {
+@keyframes slideUpModal {
   from {
     opacity: 0;
     transform: translate(-50%, -45%);
@@ -340,12 +340,24 @@ body {
   }
 }
 
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.3s ease-out;
+  animation: slideUp 0.3s ease-out backwards;
 }
 
 /* Focus visible for accessibility */

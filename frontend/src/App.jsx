@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { FixedSizeList } from 'react-window';
 import InfiniteLoader from 'react-window-infinite-loader';
@@ -163,38 +163,52 @@ function App() {
     }
   }, [accessToken, spotifyUserId]);
 
-  const refreshAccessToken = useCallback(async () => {
-    const storedRefreshToken = localStorage.getItem('spotify_refresh_token');
-    if (!storedRefreshToken) {
-      console.error('No refresh token available');
-      setError('Session expired. Please log in again.');
-      setAccessToken(null);
-      localStorage.removeItem('spotify_access_token');
-      localStorage.removeItem('spotify_refresh_token');
-      localStorage.removeItem('spotify_token_expiration');
-      return null;
+  const refreshPromiseRef = useRef(null);
+
+  const refreshAccessToken = useCallback(() => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
     }
 
-    try {
-      console.log('Attempting to refresh access token');
-      const response = await axios.post(`${API_BASE_URL}/refresh_token`, { refresh_token: storedRefreshToken });
-      const { access_token, refresh_token, expires_in } = response.data;
-      const expirationTime = new Date().getTime() + parseInt(expires_in) * 1000;
-      setAccessToken(access_token);
-      localStorage.setItem('spotify_access_token', access_token);
-      localStorage.setItem('spotify_refresh_token', refresh_token || storedRefreshToken);
-      localStorage.setItem('spotify_token_expiration', expirationTime);
-      console.log('Access token refreshed successfully, expires in:', expires_in);
-      return access_token;
-    } catch (err) {
-      console.error('Failed to refresh access token:', err.response?.data || err.message);
-      setError('Failed to refresh session. Please log in again.');
-      setAccessToken(null);
-      localStorage.removeItem('spotify_access_token');
-      localStorage.removeItem('spotify_refresh_token');
-      localStorage.removeItem('spotify_token_expiration');
-      return null;
-    }
+    const performRefresh = async () => {
+      const storedRefreshToken = localStorage.getItem('spotify_refresh_token');
+      if (!storedRefreshToken) {
+        console.error('No refresh token available');
+        setError('Session expired. Please log in again.');
+        setAccessToken(null);
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_refresh_token');
+        localStorage.removeItem('spotify_token_expiration');
+        return null;
+      }
+
+      try {
+        console.log('Attempting to refresh access token');
+        const response = await axios.post(`${API_BASE_URL}/refresh_token`, { refresh_token: storedRefreshToken });
+        const { access_token, refresh_token, expires_in } = response.data;
+        const expirationTime = new Date().getTime() + parseInt(expires_in) * 1000;
+        setAccessToken(access_token);
+        localStorage.setItem('spotify_access_token', access_token);
+        localStorage.setItem('spotify_refresh_token', refresh_token || storedRefreshToken);
+        localStorage.setItem('spotify_token_expiration', expirationTime);
+        console.log('Access token refreshed successfully, expires in:', expires_in);
+        return access_token;
+      } catch (err) {
+        console.error('Failed to refresh access token:', err.response?.data || err.message);
+        setError('Failed to refresh session. Please log in again.');
+        setAccessToken(null);
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_refresh_token');
+        localStorage.removeItem('spotify_token_expiration');
+        return null;
+      }
+    };
+
+    refreshPromiseRef.current = performRefresh().finally(() => {
+      refreshPromiseRef.current = null;
+    });
+
+    return refreshPromiseRef.current;
   }, []);
 
   const fetchWithTokenRefresh = useCallback(async (fetchFn, ...args) => {

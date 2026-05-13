@@ -533,7 +533,7 @@ app.post('/spotify/remove-duplicates', async (req, res) => {
 
 const sanitizeString = (str) => {
   if (typeof str !== 'string') return '';
-  return str.replace(/[^\w\s\-']/gi, '').trim();
+  return str.replace(/[^\w\s\-'&]/gi, '').trim();
 };
 
 app.get('/user/track-genres', async (req, res) => {
@@ -546,6 +546,7 @@ app.get('/user/track-genres', async (req, res) => {
     const genres = await UserTrackGenre.find({ userId, trackId });
     res.json({ genres: genres.map(g => g.genre) });
   } catch (err) {
+    console.error('Failed to get genres:', err);
     res.status(500).json({ error: 'Failed to get genres' });
   }
 });
@@ -564,7 +565,8 @@ app.post('/user/track-genres', async (req, res) => {
     await UserTrackGenre.create({ userId, trackId, genre });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add genre' });
+    console.error('Failed to add genre:', err);
+    res.status(500).json({ error: 'Failed to add genre', details: err.message });
   }
 });
 
@@ -579,7 +581,8 @@ app.delete('/user/track-genres', async (req, res) => {
     await UserTrackGenre.deleteOne({ userId, trackId, genre });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to remove genre' });
+    console.error('Failed to remove genre:', err);
+    res.status(500).json({ error: 'Failed to remove genre', details: err.message });
   }
 });
 

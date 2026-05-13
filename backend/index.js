@@ -388,11 +388,16 @@ app.post('/spotify/create-playlist', async (req, res) => {
     });
 
     const playlistId = playlistResponse.data.id;
-    await axios.post(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-      uris: trackUris
-    }, {
-      headers: { 'Authorization': `Bearer ${access_token}` }
-    });
+    
+    // Spotify API limits adding tracks to 100 per request.
+    for (let i = 0; i < trackUris.length; i += 100) {
+      const batch = trackUris.slice(i, i + 100);
+      await axios.post(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+        uris: batch
+      }, {
+        headers: { 'Authorization': `Bearer ${access_token}` }
+      });
+    }
 
     res.json({ playlistUrl: playlistResponse.data.external_urls.spotify });
   } catch (error) {

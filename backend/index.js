@@ -537,6 +537,31 @@ const sanitizeString = (str) => {
   return str.replace(/[^\w\s\-'&]/gi, '').trim();
 };
 
+app.get('/user/track-genres-bulk', async (req, res) => {
+  const userId = sanitizeString(req.query.userId);
+  let trackIds;
+  try {
+    trackIds = JSON.parse(req.query.trackIds);
+  } catch (err) {
+    return res.status(400).json({ error: 'Invalid trackIds' });
+  }
+  if (!userId || !Array.isArray(trackIds)) {
+    return res.status(400).json({ error: 'Missing userId or trackIds' });
+  }
+  try {
+    const docs = await UserTrackGenre.find({ userId, trackId: { $in: trackIds } });
+    const result = {};
+    docs.forEach(doc => {
+      if (!result[doc.trackId]) result[doc.trackId] = [];
+      result[doc.trackId].push(doc.genre);
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('Failed to get bulk genres:', err);
+    res.status(500).json({ error: 'Failed to get bulk genres', details: err.message });
+  }
+});
+
 app.get('/user/track-genres', async (req, res) => {
   const userId = sanitizeString(req.query.userId);
   const trackId = sanitizeString(req.query.trackId);

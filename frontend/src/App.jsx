@@ -483,8 +483,42 @@ function App() {
         const currentGenres = item.genres;
         const fallbackGenres = artistIds.flatMap(id => artistGenreFallback.get(id) || []);
         const uniqueGenres = [...new Set([...currentGenres, ...fallbackGenres])];
-        return { ...item, genres: uniqueGenres.length > 0 ? uniqueGenres : ['Unknown Genre'] };
+        return { ...item, genres: uniqueGenres.length > 0 ? uniqueGenres : [] };
       });
+
+      // Step 7: Fetch and apply custom user genres
+      if (spotifyUserId) {
+        try {
+          const allTrackIds = [...new Set(enriched.map(item => item.track?.id).filter(Boolean))];
+          let customGenresMap = {};
+          
+          for (let i = 0; i < allTrackIds.length; i += 50) {
+            const chunk = allTrackIds.slice(i, i + 50);
+            const res = await axios.get(`${API_BASE_URL}/user/track-genres-bulk`, {
+              params: { userId: spotifyUserId, trackIds: JSON.stringify(chunk) }
+            });
+            customGenresMap = { ...customGenresMap, ...res.data };
+          }
+          
+          enriched = enriched.map(item => {
+            const trackId = item.track?.id;
+            const customGenres = trackId && customGenresMap[trackId] ? customGenresMap[trackId] : [];
+            const finalGenres = [...new Set([...item.genres, ...customGenres])];
+            return { ...item, genres: finalGenres.length > 0 ? finalGenres : ['Unknown Genre'] };
+          });
+        } catch (err) {
+          console.error('Failed to fetch bulk custom user genres:', err);
+          enriched = enriched.map(item => ({
+            ...item,
+            genres: item.genres.length > 0 ? item.genres : ['Unknown Genre']
+          }));
+        }
+      } else {
+        enriched = enriched.map(item => ({
+          ...item,
+          genres: item.genres.length > 0 ? item.genres : ['Unknown Genre']
+        }));
+      }
 
       setLikedSongs(enriched);
 
@@ -700,6 +734,24 @@ function App() {
       });
       const updatedGenres = await fetchUserGenres(modalTrack.track.id);
       setModalUserGenres(updatedGenres);
+      
+      const updateGenresState = (prevSongs) => prevSongs.map(song => {
+        if (song.track?.id === modalTrack.track.id) {
+          const newGenres = [...new Set([...song.genres, genreAddValue])].filter(g => g !== 'Unknown Genre');
+          return { ...song, genres: newGenres.length ? newGenres : ['Unknown Genre'] };
+        }
+        return song;
+      });
+      
+      setLikedSongs(updateGenresState);
+      setFilteredSongs(updateGenresState);
+      setGenres(prev => {
+        if (!prev.includes(genreAddValue)) {
+          return [...prev, genreAddValue].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+        }
+        return prev;
+      });
+
       setModalSuccess('Genre added successfully!');
       setGenreAddValue('');
     } catch (err) {
@@ -721,6 +773,18 @@ function App() {
       });
       const updatedGenres = await fetchUserGenres(modalTrack.track.id);
       setModalUserGenres(updatedGenres);
+      
+      const updateGenresState = (prevSongs) => prevSongs.map(song => {
+        if (song.track?.id === modalTrack.track.id) {
+          const newGenres = song.genres.filter(g => g !== genre);
+          return { ...song, genres: newGenres.length ? newGenres : ['Unknown Genre'] };
+        }
+        return song;
+      });
+      
+      setLikedSongs(updateGenresState);
+      setFilteredSongs(updateGenresState);
+
       setModalSuccess('Genre removed successfully!');
     } catch (err) {
       setModalError('Failed to remove genre.');

@@ -62,6 +62,7 @@ if (GOOGLE_API_KEY) {
 }
 
 mongoose.connect(MONGODB_URI, {
+  dbName: 'spopify',
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => console.log('MongoDB connected successfully'))

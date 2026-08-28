@@ -23,6 +23,11 @@ const {
 
 const app = express();
 
+// Health check endpoint for external uptime monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Strict CORS: Only allow the configured frontend URI
 app.use(cors({
   origin: FRONTEND_URI || 'http://localhost:5173',
@@ -639,4 +644,4 @@ app.get('/fallback-artist-genres', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
